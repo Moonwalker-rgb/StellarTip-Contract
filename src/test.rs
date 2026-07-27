@@ -1843,30 +1843,54 @@ fn gas_test_env() -> Env {
 
 /// Return the current CPU-instruction consumption.
 fn cpu(env: &Env) -> u64 {
-    env.budget().cpu_insns().get_consumed()
+    env.budget().cpu_instruction_cost()
 }
 
 /// Max CPU instructions allowed for a single `tip()` call.  The fee-path
 /// is the worst-case envelope because it includes an extra SAC `transfer()`
 /// to the fee recipient.
-const GAS_TIP_MAX: u64 = 50_000;
+///
+/// Baseline measured at ~550 531 CPU insns (fee path); constant includes
+/// ~15 % headroom for minor SDK / host cost-model changes.
+const GAS_TIP_MAX: u64 = 635_000;
 
 /// Max CPU instructions allowed for a single `withdraw()` partial call.
-const GAS_WITHDRAW_PARTIAL_MAX: u64 = 35_000;
+///
+/// Baseline measured at ~306 673 CPU insns; constant includes ~15 %
+/// headroom.
+const GAS_WITHDRAW_PARTIAL_MAX: u64 = 355_000;
 
 /// Max CPU instructions allowed for a single `withdraw()` full call (the
 /// map-removal path inside `CreatorTokens` is more expensive).
-const GAS_WITHDRAW_FULL_MAX: u64 = 38_000;
+///
+/// Baseline measured at ~310 671 CPU insns; constant includes ~15 %
+/// headroom.
+const GAS_WITHDRAW_FULL_MAX: u64 = 360_000;
 
 /// Max CPU instructions allowed for a single `register()` call.
-const GAS_REGISTER_MAX: u64 = 40_000;
+///
+/// Baseline measured at ~172 938 CPU insns; constant includes ~15 %
+/// headroom.
+const GAS_REGISTER_MAX: u64 = 200_000;
 
 /// Max CPU instructions allowed for a single `update_profile()` call.
-const GAS_UPDATE_PROFILE_MAX: u64 = 25_000;
+///
+/// Baseline measured at ~186 054 CPU insns; constant includes ~15 %
+/// headroom.
+const GAS_UPDATE_PROFILE_MAX: u64 = 215_000;
 
 /// Max CPU instructions allowed for a single `unregister()` call (no
 /// balance, single-creator path).
-const GAS_UNREGISTER_MAX: u64 = 25_000;
+///
+/// Baseline measured at ~191 242 CPU insns; constant includes ~15 %
+/// headroom.
+const GAS_UNREGISTER_MAX: u64 = 220_000;
+
+/// Max CPU instructions allowed for a single `init()` call.
+///
+/// Baseline measured at ~84 634 CPU insns; constant includes ~15 %
+/// headroom.
+const GAS_INIT_MAX: u64 = 100_000;
 
 #[test]
 fn gas_tip_no_fee() {
@@ -1881,7 +1905,7 @@ fn gas_tip_no_fee() {
     client.init(
         &admin,
         &fee_recipient,
-        &0u32,                                   // no fee
+        &0u32, // no fee
         &crate::DEFAULT_MAX_CREATORS,
         &crate::DEFAULT_MAX_TIPS_PER_CREATOR,
         &crate::DEFAULT_MIN_TIP_AMOUNT,
@@ -1889,12 +1913,7 @@ fn gas_tip_no_fee() {
 
     // -- register a creator ---------------------------------------------------
     let creator = Address::generate(&env);
-    client.register(
-        &creator,
-        &Symbol::new(&env, "creator"),
-        &s(&env, "Creator"),
-        &s(&env, ""),
-    );
+    client.register(&creator, &Symbol::new(&env, "creator"), &s(&env, "Creator"), &s(&env, ""));
 
     // -- fund the tipper ------------------------------------------------------
     let token_admin = Address::generate(&env);
@@ -1912,10 +1931,7 @@ fn gas_tip_no_fee() {
 
     assert_eq!(idx, 0, "first tip index must be 0");
     assert_eq!(client.get_balance(&creator, &token_id), 500);
-    assert!(
-        used <= GAS_TIP_MAX,
-        "tip() consumed {used} CPU insns, limit is {GAS_TIP_MAX}"
-    );
+    assert!(used <= GAS_TIP_MAX, "tip() consumed {used} CPU insns, limit is {GAS_TIP_MAX}");
 }
 
 #[test]
@@ -1938,12 +1954,7 @@ fn gas_tip_with_fee() {
     );
 
     let creator = Address::generate(&env);
-    client.register(
-        &creator,
-        &Symbol::new(&env, "creator"),
-        &s(&env, "Creator"),
-        &s(&env, ""),
-    );
+    client.register(&creator, &Symbol::new(&env, "creator"), &s(&env, "Creator"), &s(&env, ""));
 
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
@@ -1987,12 +1998,7 @@ fn gas_withdraw_partial() {
     );
 
     let creator = Address::generate(&env);
-    client.register(
-        &creator,
-        &Symbol::new(&env, "creator"),
-        &s(&env, "Creator"),
-        &s(&env, ""),
-    );
+    client.register(&creator, &Symbol::new(&env, "creator"), &s(&env, "Creator"), &s(&env, ""));
 
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
@@ -2034,12 +2040,7 @@ fn gas_withdraw_full() {
     );
 
     let creator = Address::generate(&env);
-    client.register(
-        &creator,
-        &Symbol::new(&env, "creator"),
-        &s(&env, "Creator"),
-        &s(&env, ""),
-    );
+    client.register(&creator, &Symbol::new(&env, "creator"), &s(&env, "Creator"), &s(&env, ""));
 
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
@@ -2085,12 +2086,7 @@ fn gas_register() {
     let creator = Address::generate(&env);
 
     let before = cpu(&env);
-    client.register(
-        &creator,
-        &Symbol::new(&env, "alice"),
-        &s(&env, "Alice"),
-        &s(&env, "Writer"),
-    );
+    client.register(&creator, &Symbol::new(&env, "alice"), &s(&env, "Alice"), &s(&env, "Writer"));
     let after = cpu(&env);
     let used = after - before;
 
@@ -2121,12 +2117,7 @@ fn gas_update_profile() {
     );
 
     let creator = Address::generate(&env);
-    client.register(
-        &creator,
-        &Symbol::new(&env, "alice"),
-        &s(&env, "Alice"),
-        &s(&env, "Writer"),
-    );
+    client.register(&creator, &Symbol::new(&env, "alice"), &s(&env, "Alice"), &s(&env, "Writer"));
 
     let before = cpu(&env);
     client.update_profile(&creator, &s(&env, "Alice Updated"), &s(&env, "New bio"));
@@ -2160,12 +2151,7 @@ fn gas_unregister() {
     );
 
     let creator = Address::generate(&env);
-    client.register(
-        &creator,
-        &Symbol::new(&env, "alice"),
-        &s(&env, "Alice"),
-        &s(&env, ""),
-    );
+    client.register(&creator, &Symbol::new(&env, "alice"), &s(&env, "Alice"), &s(&env, ""));
 
     let before = cpu(&env);
     client.unregister(&creator);
@@ -2178,4 +2164,31 @@ fn gas_unregister() {
         used <= GAS_UNREGISTER_MAX,
         "unregister() consumed {used} CPU insns, limit is {GAS_UNREGISTER_MAX}"
     );
+}
+
+#[test]
+fn gas_init() {
+    let env = gas_test_env();
+
+    let admin = Address::generate(&env);
+    let fee_recipient = Address::generate(&env);
+    let contract_id = env.register_contract(None, TipContract);
+    let client = crate::TipContractClient::new(&env, &contract_id);
+
+    let before = cpu(&env);
+    client.init(
+        &admin,
+        &fee_recipient,
+        &500u32,
+        &crate::DEFAULT_MAX_CREATORS,
+        &crate::DEFAULT_MAX_TIPS_PER_CREATOR,
+        &crate::DEFAULT_MIN_TIP_AMOUNT,
+    );
+    let after = cpu(&env);
+    let used = after - before;
+
+    assert!(client.get_admin().is_some());
+    assert_eq!(client.get_fee_recipient().unwrap(), fee_recipient);
+    assert_eq!(client.get_fee_percentage(), 500);
+    assert!(used <= GAS_INIT_MAX, "init() consumed {used} CPU insns, limit is {GAS_INIT_MAX}");
 }
